@@ -1,0 +1,43 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="main.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="stb">
+      <UniqueIdentifier>{636f931f-c331-4f74-819e-1f8a0b14685a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="simple_fft">
+      <UniqueIdentifier>{fb369c42-0383-434f-811e-b2be9e9085e2}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="simple_fft\check_fft.hpp">
+      <Filter>simple_fft</Filter>
+    </ClInclude>
+    <ClInclude Include="simple_fft\copy_array.hpp">
+      <Filter>simple_fft</Filter>
+    </ClInclude>
+    <ClInclude Include="simple_fft\error_handling.hpp">
+      <Filter>simple_fft</Filter>
+    </ClInclude>
+    <ClInclude Include="simple_fft\fft.h">
+      <Filter>simple_fft</Filter>
+    </ClInclude>
+    <ClInclude Include="simple_fft\fft.hpp">
+      <Filter>simple_fft</Filter>
+    </ClInclude>
+    <ClInclude Include="simple_fft\fft_impl.hpp">
+      <Filter>simple_fft</Filter>
+    </ClInclude>
+    <ClInclude Include="simple_fft\fft_settings.h">
+      <Filter>simple_fft</Filter>
+    </ClInclude>
+    <ClInclude Include="stb\stb_image.h">
+      <Filter>stb</Filter>
+    </ClInclude>
+    <ClInclude Include="stb\stb_image_write.h">
+      <Filter>stb</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>
