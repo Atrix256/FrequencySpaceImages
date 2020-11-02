@@ -151,47 +151,12 @@ void SaveDFTMagPhaseIDFT(const ComplexImage2D& image, const char* baseFileName)
     }
 }
 
-void DoTest(const char* fileName)
+void DoTestZeroing(const ComplexImage2D& _imageDFT, const char* fileName)
 {
     char buffer[4096];
 
-    // load image and make a ComplexImage2D
-    ComplexImage2D complexImageIn;
-    {
-        // load the image
-        strcpy(buffer, "assets/");
-        strcat(buffer, fileName);
-        int w, h, comp;
-        stbi_uc* pixels = stbi_load(buffer, &w, &h, &comp, 1);
-        if (!pixels)
-        {
-            printf(__FUNCTION__ "(): Could not load image %s", buffer);
-            return;
-        }
-
-        // convert to complex pixels
-        complexImageIn.Resize(w, h);
-        for (size_t index = 0; index < complexImageIn.pixels.size(); ++index)
-            complexImageIn.pixels[index] = float(pixels[index]) / 255.0f;
-
-        // free the pixels
-        stbi_image_free(pixels);
-
-        // verify the image is a power of 2
-        if (!IsPowerOf2(w) || !IsPowerOf2(h))
-        {
-            printf(__FUNCTION__ "(): image is %ix%i but width and height need to be a power of 2", w, h);
-            return;
-        }
-    }
-
-    // DFT the image
-    ComplexImage2D complexImageOut;
-    {
-        const char* error = nullptr;
-        complexImageOut.Resize(complexImageIn.m_width, complexImageIn.m_height);
-        simple_fft::FFT(complexImageIn, complexImageOut, complexImageIn.m_width, complexImageIn.m_height, error);
-    }
+    // make a copy since this is a destructive process
+    ComplexImage2D imageDFT = _imageDFT;
 
     // get a list of pixels sorted by magnitude
     struct PixelMagnitude
@@ -199,12 +164,12 @@ void DoTest(const char* fileName)
         size_t index;
         float magnitude;
     };
-    std::vector<PixelMagnitude> pixelMagnitudes(complexImageOut.pixels.size());
+    std::vector<PixelMagnitude> pixelMagnitudes(imageDFT.pixels.size());
     {
-        for (size_t index = 0; index < complexImageOut.pixels.size(); ++index)
+        for (size_t index = 0; index < imageDFT.pixels.size(); ++index)
         {
             pixelMagnitudes[index].index = index;
-            const complex_type& c = complexImageOut.pixels[index];
+            const complex_type& c = imageDFT.pixels[index];
             pixelMagnitudes[index].magnitude = float(sqrt(c.real() * c.real() + c.imag() * c.imag()));
         }
         std::sort(
@@ -222,7 +187,7 @@ void DoTest(const char* fileName)
         // first save a data for the unmodified image, for comparisons
         {
             sprintf(buffer, "out/%s.cull.0", fileName);
-            SaveDFTMagPhaseIDFT(complexImageOut, buffer);
+            SaveDFTMagPhaseIDFT(imageDFT, buffer);
         }
         // now throw away the lowest magnitude frequencies
         for (size_t percentIndex = 1; percentIndex < 10; ++percentIndex)
@@ -233,12 +198,61 @@ void DoTest(const char* fileName)
 
             // set them all to zero
             for (size_t index = 0; index < lastIndex; ++index)
-                complexImageOut.pixels[pixelMagnitudes[index].index] = complex_type();
+                imageDFT.pixels[pixelMagnitudes[index].index] = complex_type();
 
             sprintf(buffer, "out/%s.cull.%i", fileName, (int)percentIndex);
-            SaveDFTMagPhaseIDFT(complexImageOut, buffer);
+            SaveDFTMagPhaseIDFT(imageDFT, buffer);
         }
     }
+}
+
+void DoTests(const char* fileName)
+{
+    char buffer[4096];
+
+    // load image and dft it
+    ComplexImage2D imageDFT;
+    {
+        ComplexImage2D image;
+        {
+            // load the image
+            strcpy(buffer, "assets/");
+            strcat(buffer, fileName);
+            int w, h, comp;
+            stbi_uc* pixels = stbi_load(buffer, &w, &h, &comp, 1);
+            if (!pixels)
+            {
+                printf(__FUNCTION__ "(): Could not load image %s", buffer);
+                return;
+            }
+
+            // convert to complex pixels
+            image.Resize(w, h);
+            for (size_t index = 0; index < image.pixels.size(); ++index)
+                image.pixels[index] = float(pixels[index]) / 255.0f;
+
+            // free the pixels
+            stbi_image_free(pixels);
+
+            // verify the image is a power of 2
+            if (!IsPowerOf2(w) || !IsPowerOf2(h))
+            {
+                printf(__FUNCTION__ "(): image is %ix%i but width and height need to be a power of 2", w, h);
+                return;
+            }
+        }
+
+        // DFT the image
+        {
+            const char* error = nullptr;
+            imageDFT.Resize(image.m_width, image.m_height);
+            simple_fft::FFT(image, imageDFT, image.m_width, image.m_height, error);
+        }
+    }
+
+    // test zeroing out low magnitude frequencies
+    DoTestZeroing(imageDFT, fileName);
+
 }
 
 int main(int argc, char** argv)
@@ -252,7 +266,7 @@ int main(int argc, char** argv)
     };
 
     for (size_t index = 0; index < _countof(files); ++index)
-        DoTest(files[index]);
+        DoTests(files[index]);
 
     return 0;
 }
