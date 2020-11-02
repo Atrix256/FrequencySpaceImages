@@ -33,6 +33,11 @@ T Clamp(T value, T min, T max)
         return value;
 }
 
+float Lerp(float a, float b, float t)
+{
+    return a * (1.0f - t) + b * t;
+}
+
 struct ComplexImage2D
 {
     ComplexImage2D(size_t w = 0, size_t h = 0)
@@ -206,6 +211,51 @@ void DoTestZeroing(const ComplexImage2D& _imageDFT, const char* fileName)
     }
 }
 
+void DoTestHPFLPF(const ComplexImage2D& imageDFT, const char* fileName)
+{
+    char buffer[4096];
+
+    ComplexImage2D imageDFT_HPF = imageDFT;
+    ComplexImage2D imageDFT_LPF5 = imageDFT;
+    ComplexImage2D imageDFT_LPF10 = imageDFT;
+
+    int width = (int)imageDFT.m_width;
+    int height = (int)imageDFT.m_height;
+
+    int halfWidth = width / 2;
+    int halfHeight = height / 2;
+
+    for (size_t index = 0; index < imageDFT.pixels.size(); ++index)
+    {
+        size_t px, py;
+        imageDFT.IndexToCoordinates(index, px, py);
+
+        int ipx = int((px + halfWidth) % width) - halfWidth;
+        int ipy = int((py + halfHeight) % height) - halfHeight;
+
+        float percentx = float(2 * ipx) / float(imageDFT.m_width);
+        float percenty = float(2 * ipy) / float(imageDFT.m_height);
+
+        float distance = sqrt(percentx * percentx + percenty * percenty) / sqrt(2.0f);
+        distance = Clamp(distance, 0.0f, 1.0f);
+
+        float invDist = 1.0f - distance;
+
+        imageDFT_HPF.pixels[index] *= pow(distance, 1.0f);
+        imageDFT_LPF5.pixels[index] *= pow(invDist, 5.0f);
+        imageDFT_LPF10.pixels[index] *= pow(invDist, 10.0f);
+    }
+
+    sprintf(buffer, "out/%s.hpf", fileName);
+    SaveDFTMagPhaseIDFT(imageDFT_HPF, buffer);
+
+    sprintf(buffer, "out/%s.lpf5", fileName);
+    SaveDFTMagPhaseIDFT(imageDFT_LPF5, buffer);
+
+    sprintf(buffer, "out/%s.lpf10", fileName);
+    SaveDFTMagPhaseIDFT(imageDFT_LPF10, buffer);
+}
+
 void DoTests(const char* fileName)
 {
     char buffer[4096];
@@ -253,6 +303,8 @@ void DoTests(const char* fileName)
     // test zeroing out low magnitude frequencies
     DoTestZeroing(imageDFT, fileName);
 
+    // do high pass and low pass filtering by attenuating magnitudes based on distance from center (DC / 0hz)
+    DoTestHPFLPF(imageDFT, fileName);
 }
 
 int main(int argc, char** argv)
@@ -273,13 +325,12 @@ int main(int argc, char** argv)
 
 /*
 TODO:
-- lpf and hpf by doing an envelope of frequencies.
 - do convolution... how do you take a small image (like a gaussian blob, or a star) and dft it, then multiply in frequency space against a larger image?
-
 
 BLOG:
 * zip the dft data. you are setting it to zero but not making it any smaller. zipping will show how smaller it gets. png has lossless compression.
 * mention DCT, PCA/SVD, compressed sensing, and data fitting with L1 regularization (lasso etc!)
 * also link to bart's writeups?
+* check out those email notes of yours
 
 */
