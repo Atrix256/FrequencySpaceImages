@@ -360,7 +360,8 @@ int main(int argc, char** argv)
     const char* files[] =
     {
         "lokialan.jpg",
-        "BlueNoise.png"
+        "BlueNoise.png",
+        "scenery.png"
     };
 
     for (size_t index = 0; index < _countof(files); ++index)
@@ -372,6 +373,11 @@ int main(int argc, char** argv)
 /*
 TODO:
 - do convolution... how do you take a small image (like a gaussian blob, or a star) and dft it, then multiply in frequency space against a larger image?
+
+apparently you technically need to pad both rendered scene and aperture image to be of size... scene+aperture+1
+could show how this fails when you don't do it right?
+
+note: the zero padding doesn't strictly need to be stored... and in fact, zeroes just remove multiplies and adds apparently.
 
 BLOG:
 * zip the dft data. you are setting it to zero but not making it any smaller. zipping will show how smaller it gets. png has lossless compression.
