@@ -265,14 +265,14 @@ void DoTestHPFLPF(const ComplexImage2D& imageDFT, const char* fileName)
         imageDFT_Notch.pixels[index] *= notch;
         imageDFT_BandPass.pixels[index] *= bandpass;
 
-        // TODO: 0,0 is not in the middle of the image. why?
-
-        filter_hpf5[index] = (uint8_t)Clamp(hpf5 * 256.0f, 0.0f, 255.0f);
-        filter_hpf10[index] = (uint8_t)Clamp(hpf10 * 256.0f, 0.0f, 255.0f);
-        filter_lpf5[index] = (uint8_t)Clamp(lpf5 * 256.0f, 0.0f, 255.0f);
-        filter_lpf10[index] = (uint8_t)Clamp(lpf10 * 256.0f, 0.0f, 255.0f);
-        filter_notch[index] = (uint8_t)Clamp(notch * 256.0f, 0.0f, 255.0f);
-        filter_bandpass[index] = (uint8_t)Clamp(bandpass * 256.0f, 0.0f, 255.0f);
+        ipx += halfWidth;
+        ipy += halfHeight;
+        filter_hpf5[ipy * width + ipx] = (uint8_t)Clamp(hpf5 * 256.0f, 0.0f, 255.0f);
+        filter_hpf10[ipy * width + ipx] = (uint8_t)Clamp(hpf10 * 256.0f, 0.0f, 255.0f);
+        filter_lpf5[ipy * width + ipx] = (uint8_t)Clamp(lpf5 * 256.0f, 0.0f, 255.0f);
+        filter_lpf10[ipy * width + ipx] = (uint8_t)Clamp(lpf10 * 256.0f, 0.0f, 255.0f);
+        filter_notch[ipy * width + ipx] = (uint8_t)Clamp(notch * 256.0f, 0.0f, 255.0f);
+        filter_bandpass[ipy * width + ipx] = (uint8_t)Clamp(bandpass * 256.0f, 0.0f, 255.0f);
     }
 
     sprintf(buffer, "out/%s.hpf5", fileName);
@@ -347,8 +347,7 @@ void DoTests(const char* fileName)
     }
 
     // test zeroing out low magnitude frequencies
-    //DoTestZeroing(imageDFT, fileName);
-    // TODO: uncomment the above
+    DoTestZeroing(imageDFT, fileName);
 
     // do high pass and low pass filtering by attenuating magnitudes based on distance from center (DC / 0hz)
     DoTestHPFLPF(imageDFT, fileName);
