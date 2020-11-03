@@ -215,15 +215,25 @@ void DoTestHPFLPF(const ComplexImage2D& imageDFT, const char* fileName)
 {
     char buffer[4096];
 
-    ComplexImage2D imageDFT_HPF = imageDFT;
+    ComplexImage2D imageDFT_HPF5 = imageDFT;
+    ComplexImage2D imageDFT_HPF10 = imageDFT;
     ComplexImage2D imageDFT_LPF5 = imageDFT;
     ComplexImage2D imageDFT_LPF10 = imageDFT;
+    ComplexImage2D imageDFT_Notch = imageDFT;
+    ComplexImage2D imageDFT_BandPass = imageDFT;
 
     int width = (int)imageDFT.m_width;
     int height = (int)imageDFT.m_height;
 
     int halfWidth = width / 2;
     int halfHeight = height / 2;
+
+    std::vector<uint8_t> filter_hpf5(imageDFT.m_width * imageDFT.m_height);
+    std::vector<uint8_t> filter_hpf10(imageDFT.m_width * imageDFT.m_height);
+    std::vector<uint8_t> filter_lpf5(imageDFT.m_width * imageDFT.m_height);
+    std::vector<uint8_t> filter_lpf10(imageDFT.m_width * imageDFT.m_height);
+    std::vector<uint8_t> filter_notch(imageDFT.m_width * imageDFT.m_height);
+    std::vector<uint8_t> filter_bandpass(imageDFT.m_width * imageDFT.m_height);
 
     for (size_t index = 0; index < imageDFT.pixels.size(); ++index)
     {
@@ -238,22 +248,58 @@ void DoTestHPFLPF(const ComplexImage2D& imageDFT, const char* fileName)
 
         float distance = sqrt(percentx * percentx + percenty * percenty) / sqrt(2.0f);
         distance = Clamp(distance, 0.0f, 1.0f);
-
         float invDist = 1.0f - distance;
 
-        imageDFT_HPF.pixels[index] *= pow(distance, 1.0f);
-        imageDFT_LPF5.pixels[index] *= pow(invDist, 5.0f);
-        imageDFT_LPF10.pixels[index] *= pow(invDist, 10.0f);
+        float lpf5 = pow(invDist, 5.0f);
+        float lpf10 = pow(invDist, 10.0f);
+        float hpf5 = 1.0f - pow(invDist, 5.0f);
+        float hpf10 = 1.0f - pow(invDist, 10.0f);
+
+        float notch = abs(distance - 0.5f) * 2.0f;
+        float bandpass = 1.0f - notch;
+
+        imageDFT_HPF5.pixels[index] *= hpf5;
+        imageDFT_HPF10.pixels[index] *= hpf10;
+        imageDFT_LPF5.pixels[index] *= lpf5;
+        imageDFT_LPF10.pixels[index] *= lpf10;
+        imageDFT_Notch.pixels[index] *= notch;
+        imageDFT_BandPass.pixels[index] *= bandpass;
+
+        // TODO: 0,0 is not in the middle of the image. why?
+
+        filter_hpf5[index] = (uint8_t)Clamp(hpf5 * 256.0f, 0.0f, 255.0f);
+        filter_hpf10[index] = (uint8_t)Clamp(hpf10 * 256.0f, 0.0f, 255.0f);
+        filter_lpf5[index] = (uint8_t)Clamp(lpf5 * 256.0f, 0.0f, 255.0f);
+        filter_lpf10[index] = (uint8_t)Clamp(lpf10 * 256.0f, 0.0f, 255.0f);
+        filter_notch[index] = (uint8_t)Clamp(notch * 256.0f, 0.0f, 255.0f);
+        filter_bandpass[index] = (uint8_t)Clamp(bandpass * 256.0f, 0.0f, 255.0f);
     }
 
-    sprintf(buffer, "out/%s.hpf", fileName);
-    SaveDFTMagPhaseIDFT(imageDFT_HPF, buffer);
+    sprintf(buffer, "out/%s.hpf5", fileName);
+    SaveDFTMagPhaseIDFT(imageDFT_HPF5, buffer);
+
+    sprintf(buffer, "out/%s.hpf10", fileName);
+    SaveDFTMagPhaseIDFT(imageDFT_HPF10, buffer);
 
     sprintf(buffer, "out/%s.lpf5", fileName);
     SaveDFTMagPhaseIDFT(imageDFT_LPF5, buffer);
 
     sprintf(buffer, "out/%s.lpf10", fileName);
     SaveDFTMagPhaseIDFT(imageDFT_LPF10, buffer);
+
+    sprintf(buffer, "out/%s.notch", fileName);
+    SaveDFTMagPhaseIDFT(imageDFT_Notch, buffer);
+
+    sprintf(buffer, "out/%s.bandpass", fileName);
+    SaveDFTMagPhaseIDFT(imageDFT_BandPass, buffer);
+
+    // save the filters for visualization purposes
+    stbi_write_png("out/filter_hpf5.png", width, height, 1, filter_hpf5.data(), width);
+    stbi_write_png("out/filter_hpf10.png", width, height, 1, filter_hpf10.data(), width);
+    stbi_write_png("out/filter_lpf5.png", width, height, 1, filter_lpf5.data(), width);
+    stbi_write_png("out/filter_lpf10.png", width, height, 1, filter_lpf10.data(), width);
+    stbi_write_png("out/filter_notch.png", width, height, 1, filter_notch.data(), width);
+    stbi_write_png("out/filter_bandpass.png", width, height, 1, filter_bandpass.data(), width);
 }
 
 void DoTests(const char* fileName)
@@ -301,7 +347,8 @@ void DoTests(const char* fileName)
     }
 
     // test zeroing out low magnitude frequencies
-    DoTestZeroing(imageDFT, fileName);
+    //DoTestZeroing(imageDFT, fileName);
+    // TODO: uncomment the above
 
     // do high pass and low pass filtering by attenuating magnitudes based on distance from center (DC / 0hz)
     DoTestHPFLPF(imageDFT, fileName);
