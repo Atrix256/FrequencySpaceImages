@@ -373,6 +373,16 @@ ComplexImage2D ShiftImage(const ComplexImage2D& image, size_t offsetx, size_t of
     return ret;
 }
 
+void Normalize(ComplexImage2D& image)
+{
+    float sum = 0.0f;
+    for (const complex_type& c : image.pixels)
+        sum += sqrt(c.imag() * c.imag() + c.real() * c.real());
+
+    for (complex_type& c : image.pixels)
+        c /= sum;
+}
+
 void DoTestConvolution(ComplexImage2D image, const char* fileName)
 {
     // TODO: could also do a gaussian blur convolution this way.
@@ -381,6 +391,9 @@ void DoTestConvolution(ComplexImage2D image, const char* fileName)
     // load the star - what we are going to use for convolution
     ComplexImage2D imageStar;
     LoadImage("assets/star.png", imageStar);
+
+    // make sure the kernel sums to 1.0
+    Normalize(imageStar);
 
     // calculate the size that the images need to be, to be multiplied in frequency space
     size_t desiredWidth = NextPowerOf2(image.m_width + imageStar.m_width + 1);
@@ -392,6 +405,7 @@ void DoTestConvolution(ComplexImage2D image, const char* fileName)
 
     // TODO: this!
     // Need to shift the star kernel half an image over: https://stackoverflow.com/questions/54877892/convolving-image-with-kernel-in-fourier-domain
+    // Basically (0,0) is the center when convolving, so need to fix that to be true
     imageStar = ShiftImage(imageStar, imageStar.m_width / 2, imageStar.m_height / 2);
 
     // DFT the images
@@ -410,7 +424,7 @@ void DoTestConvolution(ComplexImage2D image, const char* fileName)
 #else
     //const float c_scaleDown = 1.0f / (float)sqrt(image.m_width * image.m_height);
     //const double c_scale = 4.0f / (double)(image.m_width * image.m_height);
-    const double c_scale = 1.0f / sqrt(image.m_width * image.m_height);
+    const double c_scale = 1.0f;// / sqrt(image.m_width * image.m_height);
     ComplexImage2D resultDFT(desiredWidth, desiredHeight);
     for (size_t index = 0; index < imageDFT.pixels.size(); ++index)
     {
