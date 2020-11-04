@@ -22,6 +22,14 @@ inline bool IsPowerOf2(size_t n)
     return (n & (n - 1)) == 0;
 }
 
+inline size_t NextPowerOf2(size_t n)
+{
+    size_t ret = 1;
+    while (ret < n)
+        ret = ret << 1;
+    return ret;
+}
+
 template <typename T>
 T Clamp(T value, T min, T max)
 {
@@ -302,55 +310,156 @@ void DoTestHPFLPF(const ComplexImage2D& imageDFT, const char* fileName)
     stbi_write_png("out/filter_bandpass.png", width, height, 1, filter_bandpass.data(), width);
 }
 
+bool LoadImage(const char* fileName, ComplexImage2D& image)
+{
+    // load the image
+    int w, h, comp;
+    stbi_uc* pixels = stbi_load(fileName, &w, &h, &comp, 1);
+    if (!pixels)
+    {
+        printf(__FUNCTION__ "(): Could not load image %s", fileName);
+        return false;
+    }
+
+    // convert to complex pixels
+    image.Resize(w, h);
+    for (size_t index = 0; index < image.pixels.size(); ++index)
+        image.pixels[index] = float(pixels[index]) / 255.0f;
+
+    // free the pixels
+    stbi_image_free(pixels);
+
+    // verify the image is a power of 2
+    if (!IsPowerOf2(w) || !IsPowerOf2(h))
+    {
+        printf(__FUNCTION__ "(): image is %ix%i but width and height need to be a power of 2", w, h);
+        return false;
+    }
+
+    return true;
+}
+
+ComplexImage2D ZeroPad(const ComplexImage2D& image, size_t width, size_t height)
+{
+    size_t offsetx = (width - image.m_width) / 2;
+    size_t offsety = (height - image.m_height) / 2;
+
+    ComplexImage2D ret(width, height);
+
+    for (size_t iy = 0; iy < image.m_height; ++iy)
+    {
+        const complex_type* src = &image.pixels[iy * image.m_width];
+        complex_type* dest = &ret.pixels[(iy + offsety) * ret.m_width + offsetx];
+        memcpy(dest, src, sizeof(complex_type) * image.m_width);
+    }
+
+    return ret;
+}
+
+void DoTestConvolution(ComplexImage2D image, const char* fileName)
+{
+    // load the star - what we are going to use for convolution
+    ComplexImage2D imageStar;
+    LoadImage("assets/star.png", imageStar);
+
+    // calculate the size that the images need to be, to be multiplied in frequency space
+    size_t desiredWidth = NextPowerOf2(image.m_width + imageStar.m_width + 1);
+    size_t desiredHeight = NextPowerOf2(image.m_height + imageStar.m_height + 1);
+
+    // zero pad the images to be the right size
+    image = ZeroPad(image, desiredWidth, desiredHeight);
+    imageStar = ZeroPad(imageStar, desiredWidth, desiredHeight);
+
+    // DFT the images
+    ComplexImage2D imageStarDFT(desiredWidth, desiredHeight), imageDFT(desiredWidth, desiredHeight);
+    const char* error = nullptr;
+    simple_fft::FFT(image, imageDFT, image.m_width, image.m_height, error);
+    simple_fft::FFT(imageStar, imageStarDFT, imageStar.m_width, imageStar.m_height, error);
+
+    // TODO: ?? seems like it ought to be /N, since each is N* too big?
+    // do component wise multiplication of the images
+#if 0
+    const float c_scale = 1.0f / (float)(image.m_width * image.m_height);
+    ComplexImage2D resultDFT(desiredWidth, desiredHeight);
+    for (size_t index = 0; index < imageDFT.pixels.size(); ++index)
+        resultDFT.pixels[index] = imageDFT.pixels[index] * imageStarDFT.pixels[index] * complex_type(c_scale, 0);
+#else
+    const float c_scaleDown = 1.0f / (float)sqrt(image.m_width * image.m_height);
+    ComplexImage2D resultDFT(desiredWidth, desiredHeight);
+    for (size_t index = 0; index < imageDFT.pixels.size(); ++index)
+        resultDFT.pixels[index] = imageDFT.pixels[index] * imageStarDFT.pixels[index] * complex_type(c_scaleDown, 0);
+#endif
+
+
+    // TODO: clean things up!
+
+    // TODO: temp!
+    //resultDFT = imageStarDFT;
+
+    // IDFT the result
+    ComplexImage2D result(desiredWidth, desiredHeight);
+    simple_fft::IFFT(resultDFT, result, resultDFT.m_width, resultDFT.m_height, error);
+
+    // TODO: remove the zero padding!
+
+    // TODO: temp!
+    float magmax = -FLT_MAX;
+    float magmin = FLT_MIN;
+
+    // convert to U8
+    std::vector<uint8_t> pixels(result.pixels.size());
+    for (size_t index = 0; index < result.pixels.size(); ++index)
+    {
+        const complex_type& c = result.pixels[index];
+        float mag = float(sqrt(c.real() * c.real() + c.imag() * c.imag()));
+
+        magmax = std::max(mag, magmax);
+        magmin = std::min(mag, magmin);
+
+        // TODO: temp!
+        //mag /= 256.0f;
+
+        pixels[index] = (uint8_t)Clamp(mag * 256.0f, 0.0f, 255.0f);
+    }
+
+    // write out the result
+    char buffer[4096];
+    sprintf(buffer, "out/%s.conv.png", fileName);
+    stbi_write_png(buffer, (int)result.m_width, (int)result.m_height, 1, pixels.data(), (int)result.m_width);
+
+    // TODO: this library scales values down by N on IDFT. what does that mean for multiplying frequency space values together? sqrt(N) doesn't quite seem appropriate?
+
+
+    // TODO: temp!
+    int ijkl = 0;
+}
+
 void DoTests(const char* fileName)
 {
     char buffer[4096];
 
     // load image and dft it
-    ComplexImage2D imageDFT;
+    ComplexImage2D image, imageDFT;
     {
-        ComplexImage2D image;
-        {
-            // load the image
-            strcpy(buffer, "assets/");
-            strcat(buffer, fileName);
-            int w, h, comp;
-            stbi_uc* pixels = stbi_load(buffer, &w, &h, &comp, 1);
-            if (!pixels)
-            {
-                printf(__FUNCTION__ "(): Could not load image %s", buffer);
-                return;
-            }
-
-            // convert to complex pixels
-            image.Resize(w, h);
-            for (size_t index = 0; index < image.pixels.size(); ++index)
-                image.pixels[index] = float(pixels[index]) / 255.0f;
-
-            // free the pixels
-            stbi_image_free(pixels);
-
-            // verify the image is a power of 2
-            if (!IsPowerOf2(w) || !IsPowerOf2(h))
-            {
-                printf(__FUNCTION__ "(): image is %ix%i but width and height need to be a power of 2", w, h);
-                return;
-            }
-        }
+        // load the image
+        strcpy(buffer, "assets/");
+        strcat(buffer, fileName);
+        LoadImage(buffer, image);
 
         // DFT the image
-        {
-            const char* error = nullptr;
-            imageDFT.Resize(image.m_width, image.m_height);
-            simple_fft::FFT(image, imageDFT, image.m_width, image.m_height, error);
-        }
+        const char* error = nullptr;
+        imageDFT.Resize(image.m_width, image.m_height);
+        simple_fft::FFT(image, imageDFT, image.m_width, image.m_height, error);
     }
 
     // test zeroing out low magnitude frequencies
-    DoTestZeroing(imageDFT, fileName);
+    //DoTestZeroing(imageDFT, fileName);
 
+    // TODO: rename to DoTestFiltering
     // do high pass and low pass filtering by attenuating magnitudes based on distance from center (DC / 0hz)
-    DoTestHPFLPF(imageDFT, fileName);
+    //DoTestHPFLPF(imageDFT, fileName);
+
+    DoTestConvolution(image, fileName);
 }
 
 int main(int argc, char** argv)
