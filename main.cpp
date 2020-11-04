@@ -376,6 +376,7 @@ ComplexImage2D ShiftImage(const ComplexImage2D& image, size_t offsetx, size_t of
 void DoTestConvolution(ComplexImage2D image, const char* fileName)
 {
     // TODO: could also do a gaussian blur convolution this way.
+    // TODO: maybe quicker to do box blur as a test too!
 
     // load the star - what we are going to use for convolution
     ComplexImage2D imageStar;
@@ -440,8 +441,9 @@ void DoTestConvolution(ComplexImage2D image, const char* fileName)
     std::vector<uint8_t> pixels(result.pixels.size());
     for (size_t index = 0; index < result.pixels.size(); ++index)
     {
+        // TODO: all the python code uses the real as a result, not the magnitude!
         const complex_type& c = result.pixels[index];
-        float mag = float(sqrt(c.real() * c.real() + c.imag() * c.imag()));
+        float mag = c.real();
 
         magmax = std::max(mag, magmax);
         magmin = std::min(mag, magmin);
