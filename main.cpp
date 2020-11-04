@@ -356,8 +356,27 @@ ComplexImage2D ZeroPad(const ComplexImage2D& image, size_t width, size_t height)
     return ret;
 }
 
+ComplexImage2D ShiftImage(const ComplexImage2D& image, size_t offsetx, size_t offsety)
+{
+    ComplexImage2D ret = image;
+
+    for (size_t iy = 0; iy < image.m_height; ++iy)
+    {
+        size_t srciy = (iy + offsety) % image.m_height;
+        for (size_t ix = 0; ix < image.m_width; ++ix)
+        {
+            size_t srcix = (ix + offsetx) % image.m_width;
+            ret(ix, iy) = image(srcix, srciy);
+        }
+    }
+
+    return ret;
+}
+
 void DoTestConvolution(ComplexImage2D image, const char* fileName)
 {
+    // TODO: could also do a gaussian blur convolution this way.
+
     // load the star - what we are going to use for convolution
     ComplexImage2D imageStar;
     LoadImage("assets/star.png", imageStar);
@@ -370,6 +389,10 @@ void DoTestConvolution(ComplexImage2D image, const char* fileName)
     image = ZeroPad(image, desiredWidth, desiredHeight);
     imageStar = ZeroPad(imageStar, desiredWidth, desiredHeight);
 
+    // TODO: this!
+    // Need to shift the star kernel half an image over: https://stackoverflow.com/questions/54877892/convolving-image-with-kernel-in-fourier-domain
+    imageStar = ShiftImage(imageStar, imageStar.m_width / 2, imageStar.m_height / 2);
+
     // DFT the images
     ComplexImage2D imageStarDFT(desiredWidth, desiredHeight), imageDFT(desiredWidth, desiredHeight);
     const char* error = nullptr;
@@ -379,15 +402,22 @@ void DoTestConvolution(ComplexImage2D image, const char* fileName)
     // TODO: ?? seems like it ought to be /N, since each is N* too big?
     // do component wise multiplication of the images
 #if 0
-    const float c_scale = 1.0f / (float)(image.m_width * image.m_height);
+    const double c_scale = 1.0f / (double)(image.m_width * image.m_height);
     ComplexImage2D resultDFT(desiredWidth, desiredHeight);
     for (size_t index = 0; index < imageDFT.pixels.size(); ++index)
         resultDFT.pixels[index] = imageDFT.pixels[index] * imageStarDFT.pixels[index] * complex_type(c_scale, 0);
 #else
-    const float c_scaleDown = 1.0f / (float)sqrt(image.m_width * image.m_height);
+    //const float c_scaleDown = 1.0f / (float)sqrt(image.m_width * image.m_height);
+    //const double c_scale = 4.0f / (double)(image.m_width * image.m_height);
+    const double c_scale = 1.0f / sqrt(image.m_width * image.m_height);
     ComplexImage2D resultDFT(desiredWidth, desiredHeight);
     for (size_t index = 0; index < imageDFT.pixels.size(); ++index)
-        resultDFT.pixels[index] = imageDFT.pixels[index] * imageStarDFT.pixels[index] * complex_type(c_scaleDown, 0);
+    {
+        complex_type blah = imageDFT.pixels[index] * imageStarDFT.pixels[index];
+
+        resultDFT.pixels[index] = imageDFT.pixels[index] * imageStarDFT.pixels[index] * complex_type(c_scale, 0);
+        int ijkl = 0;
+    }
 #endif
 
 
@@ -416,9 +446,6 @@ void DoTestConvolution(ComplexImage2D image, const char* fileName)
         magmax = std::max(mag, magmax);
         magmin = std::min(mag, magmin);
 
-        // TODO: temp!
-        //mag /= 256.0f;
-
         pixels[index] = (uint8_t)Clamp(mag * 256.0f, 0.0f, 255.0f);
     }
 
@@ -429,6 +456,12 @@ void DoTestConvolution(ComplexImage2D image, const char* fileName)
 
     // TODO: this library scales values down by N on IDFT. what does that mean for multiplying frequency space values together? sqrt(N) doesn't quite seem appropriate?
 
+    // TODO: why is the image shifted by half?
+    // TODO: is the offset problem that the star isn't centered? does changing the order of multiplication do anything?
+    // TODO: could also try making a single dirac delta pixel in the center of an image, instead of the star, and multiply (convolve) that.
+    // TODO: did adding all that black border (zero padding) make the resulting image dimmer? could try making the black border larger and seeing! if so, will have to compensate
+
+    // TODO: maybe do this same operation in python and see what pops out
 
     // TODO: temp!
     int ijkl = 0;
