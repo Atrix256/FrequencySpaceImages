@@ -219,7 +219,7 @@ void DoTestZeroing(const ComplexImage2D& _imageDFT, const char* fileName)
     }
 }
 
-void DoTestHPFLPF(const ComplexImage2D& imageDFT, const char* fileName)
+void DoTestFiltering(const ComplexImage2D& imageDFT, const char* fileName)
 {
     char buffer[4096];
 
@@ -356,6 +356,23 @@ ComplexImage2D ZeroPad(const ComplexImage2D& image, size_t width, size_t height)
     return ret;
 }
 
+ComplexImage2D UnZeroPad(const ComplexImage2D& image, size_t width, size_t height)
+{
+    size_t offsetx = (image.m_width - width) / 2;
+    size_t offsety = (image.m_height - height) / 2;
+
+    ComplexImage2D ret(width, height);
+
+    for (size_t iy = 0; iy < height; ++iy)
+    {
+        const complex_type* src = &image.pixels[(iy + offsety) * image.m_width + offsetx];
+        complex_type* dest = &ret.pixels[iy * ret.m_width];
+        memcpy(dest, src, sizeof(complex_type) * width);
+    }
+
+    return ret;
+}
+
 ComplexImage2D ShiftImage(const ComplexImage2D& image, size_t offsetx, size_t offsety)
 {
     ComplexImage2D ret = image;
@@ -375,7 +392,7 @@ ComplexImage2D ShiftImage(const ComplexImage2D& image, size_t offsetx, size_t of
 
 void Normalize(ComplexImage2D& image)
 {
-    float sum = 0.0f;
+    double sum = 0.0f;
     for (const complex_type& c : image.pixels)
         sum += sqrt(c.imag() * c.imag() + c.real() * c.real());
 
@@ -383,104 +400,58 @@ void Normalize(ComplexImage2D& image)
         c /= sum;
 }
 
-void DoTestConvolution(ComplexImage2D image, const char* fileName)
+void DoTestConvolution(ComplexImage2D image, const char* fileName, const char* kernelName)
 {
-    // TODO: could also do a gaussian blur convolution this way.
-    // TODO: maybe quicker to do box blur as a test too!
-
     // load the star - what we are going to use for convolution
-    ComplexImage2D imageStar;
-    LoadImage("assets/star.png", imageStar);
+    char buffer[4096];
+    sprintf(buffer, "assets/%s.png", kernelName);
+    ComplexImage2D imageKernel;
+    LoadImage(buffer, imageKernel);
 
     // make sure the kernel sums to 1.0
-    Normalize(imageStar);
+    Normalize(imageKernel);
+
+    size_t initialWidth = image.m_width;
+    size_t initialHeight = image.m_height;
 
     // calculate the size that the images need to be, to be multiplied in frequency space
-    size_t desiredWidth = NextPowerOf2(image.m_width + imageStar.m_width + 1);
-    size_t desiredHeight = NextPowerOf2(image.m_height + imageStar.m_height + 1);
+    size_t desiredWidth = NextPowerOf2(image.m_width + imageKernel.m_width + 1);
+    size_t desiredHeight = NextPowerOf2(image.m_height + imageKernel.m_height + 1);
 
     // zero pad the images to be the right size
     image = ZeroPad(image, desiredWidth, desiredHeight);
-    imageStar = ZeroPad(imageStar, desiredWidth, desiredHeight);
+    imageKernel = ZeroPad(imageKernel, desiredWidth, desiredHeight);
 
-    // TODO: this!
     // Need to shift the star kernel half an image over: https://stackoverflow.com/questions/54877892/convolving-image-with-kernel-in-fourier-domain
-    // Basically (0,0) is the center when convolving, so need to fix that to be true
-    imageStar = ShiftImage(imageStar, imageStar.m_width / 2, imageStar.m_height / 2);
+    // (0,0) is the center when convolving, so need to fix that to be true
+    imageKernel = ShiftImage(imageKernel, imageKernel.m_width / 2, imageKernel.m_height / 2);
 
     // DFT the images
-    ComplexImage2D imageStarDFT(desiredWidth, desiredHeight), imageDFT(desiredWidth, desiredHeight);
+    ComplexImage2D imageKernelDFT(desiredWidth, desiredHeight), imageDFT(desiredWidth, desiredHeight);
     const char* error = nullptr;
     simple_fft::FFT(image, imageDFT, image.m_width, image.m_height, error);
-    simple_fft::FFT(imageStar, imageStarDFT, imageStar.m_width, imageStar.m_height, error);
+    simple_fft::FFT(imageKernel, imageKernelDFT, imageKernel.m_width, imageKernel.m_height, error);
 
-    // TODO: ?? seems like it ought to be /N, since each is N* too big?
-    // do component wise multiplication of the images
-#if 0
-    const double c_scale = 1.0f / (double)(image.m_width * image.m_height);
+    // multiply in frequency domain, to convolve the images
     ComplexImage2D resultDFT(desiredWidth, desiredHeight);
     for (size_t index = 0; index < imageDFT.pixels.size(); ++index)
-        resultDFT.pixels[index] = imageDFT.pixels[index] * imageStarDFT.pixels[index] * complex_type(c_scale, 0);
-#else
-    //const float c_scaleDown = 1.0f / (float)sqrt(image.m_width * image.m_height);
-    //const double c_scale = 4.0f / (double)(image.m_width * image.m_height);
-    const double c_scale = 1.0f;// / sqrt(image.m_width * image.m_height);
-    ComplexImage2D resultDFT(desiredWidth, desiredHeight);
-    for (size_t index = 0; index < imageDFT.pixels.size(); ++index)
-    {
-        complex_type blah = imageDFT.pixels[index] * imageStarDFT.pixels[index];
-
-        resultDFT.pixels[index] = imageDFT.pixels[index] * imageStarDFT.pixels[index] * complex_type(c_scale, 0);
-        int ijkl = 0;
-    }
-#endif
-
-
-    // TODO: clean things up!
-
-    // TODO: temp!
-    //resultDFT = imageStarDFT;
+        resultDFT.pixels[index] = imageDFT.pixels[index] * imageKernelDFT.pixels[index];
 
     // IDFT the result
     ComplexImage2D result(desiredWidth, desiredHeight);
     simple_fft::IFFT(resultDFT, result, resultDFT.m_width, resultDFT.m_height, error);
 
-    // TODO: remove the zero padding!
-
-    // TODO: temp!
-    float magmax = -FLT_MAX;
-    float magmin = FLT_MIN;
+    // remove the extra bordering we put on
+    result = UnZeroPad(result, initialWidth, initialHeight);
 
     // convert to U8
     std::vector<uint8_t> pixels(result.pixels.size());
     for (size_t index = 0; index < result.pixels.size(); ++index)
-    {
-        // TODO: all the python code uses the real as a result, not the magnitude!
-        const complex_type& c = result.pixels[index];
-        float mag = c.real();
-
-        magmax = std::max(mag, magmax);
-        magmin = std::min(mag, magmin);
-
-        pixels[index] = (uint8_t)Clamp(mag * 256.0f, 0.0f, 255.0f);
-    }
+        pixels[index] = (uint8_t)Clamp(result.pixels[index].real() * 256.0, 0.0, 255.0);
 
     // write out the result
-    char buffer[4096];
-    sprintf(buffer, "out/%s.conv.png", fileName);
+    sprintf(buffer, "out/%s.conv.%s.png", fileName, kernelName);
     stbi_write_png(buffer, (int)result.m_width, (int)result.m_height, 1, pixels.data(), (int)result.m_width);
-
-    // TODO: this library scales values down by N on IDFT. what does that mean for multiplying frequency space values together? sqrt(N) doesn't quite seem appropriate?
-
-    // TODO: why is the image shifted by half?
-    // TODO: is the offset problem that the star isn't centered? does changing the order of multiplication do anything?
-    // TODO: could also try making a single dirac delta pixel in the center of an image, instead of the star, and multiply (convolve) that.
-    // TODO: did adding all that black border (zero padding) make the resulting image dimmer? could try making the black border larger and seeing! if so, will have to compensate
-
-    // TODO: maybe do this same operation in python and see what pops out
-
-    // TODO: temp!
-    int ijkl = 0;
 }
 
 void DoTests(const char* fileName)
@@ -502,13 +473,22 @@ void DoTests(const char* fileName)
     }
 
     // test zeroing out low magnitude frequencies
-    //DoTestZeroing(imageDFT, fileName);
+    DoTestZeroing(imageDFT, fileName);
 
-    // TODO: rename to DoTestFiltering
     // do high pass and low pass filtering by attenuating magnitudes based on distance from center (DC / 0hz)
-    //DoTestHPFLPF(imageDFT, fileName);
+    DoTestFiltering(imageDFT, fileName);
 
-    DoTestConvolution(image, fileName);
+    // convolve the images against other images
+    const char* files[] =
+    {
+        "star",
+        "plus",
+        "circle",
+        "blob"
+    };
+
+    for (size_t index = 0; index < _countof(files); ++index)
+        DoTestConvolution(image, fileName, files[index]);
 }
 
 int main(int argc, char** argv)
@@ -518,8 +498,12 @@ int main(int argc, char** argv)
     const char* files[] =
     {
         "lokialan.jpg",
+        "scenery.png",
+        "star.png",
+        "plus.png",
+        "circle.png",
+        "blob.png",
         "BlueNoise.png",
-        "scenery.png"
     };
 
     for (size_t index = 0; index < _countof(files); ++index)
@@ -527,20 +511,3 @@ int main(int argc, char** argv)
 
     return 0;
 }
-
-/*
-TODO:
-- do convolution... how do you take a small image (like a gaussian blob, or a star) and dft it, then multiply in frequency space against a larger image?
-
-apparently you technically need to pad both rendered scene and aperture image to be of size... scene+aperture+1
-could show how this fails when you don't do it right?
-
-note: the zero padding doesn't strictly need to be stored... and in fact, zeroes just remove multiplies and adds apparently.
-
-BLOG:
-* zip the dft data. you are setting it to zero but not making it any smaller. zipping will show how smaller it gets. png has lossless compression.
-* mention DCT, PCA/SVD, compressed sensing, and data fitting with L1 regularization (lasso etc!)
-* also link to bart's writeups?
-* check out those email notes of yours
-
-*/
